@@ -28,6 +28,8 @@ router
   .route('/tour-within/:distance/center/:latlan/unit/:unit')
   .get(tourController.getToursWithin);
 
+router.route('/distance/:latlan/unit/:unit').get(tourController.getDistance);
+
 router
   .route('/')
   //adding protection route

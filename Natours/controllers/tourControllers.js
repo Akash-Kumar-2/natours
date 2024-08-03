@@ -295,3 +295,40 @@ exports.getToursWithin = catchAsync(async (req, res, next) => {
     }
   });
 });
+
+exports.getDistance = catchAsync(async (req, res, next) => {
+  const { latlan, unit } = req.params;
+  const [lat, lan] = latlan.split(',');
+
+  const multiplier = unit === 'mi' ? 0.000621371 : 0.001;
+
+  if (!lat || !lan) {
+    return next(new AppError('Please provide latiude and longitude ', 400));
+  }
+  //aggregation pipeline is called on the model itself
+  const distances = await Tour.aggregate([
+    {
+      $geoNear: {
+        near: {
+          type: 'point',
+          coordinates: [lan * 1, lat * 1]
+        },
+        distanceField: 'distance',
+        distanceMultiplier: multiplier
+      }
+    },
+    {
+      $project: {
+        name: 1,
+        distance: 1
+      }
+    }
+  ]);
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      distances
+    }
+  });
+});

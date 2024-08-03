@@ -202,7 +202,18 @@ tourSchema.post(/^find/, function(doc, next) {
 //Aggregation middleware
 
 tourSchema.pre('aggregate', function(next) {
-  this.pipeline().unshift({ $match: { secretTour: { $ne: true } } });
+  const { pipeline } = this;
+
+  if (Array.isArray(pipeline)) {
+    // Check if the pipeline contains any geospatial query stages
+    const hasGeoStage = pipeline.some(stage =>
+      stage.hasOwnProperty('$geoNear')
+    );
+
+    if (!hasGeoStage) {
+      pipeline.unshift({ $match: { secretTour: { $ne: true } } });
+    }
+  }
   // console.log(this.pipeline());
   next();
 });
