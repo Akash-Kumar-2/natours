@@ -8,6 +8,7 @@ const sendEmail = require('./../utlis/email');
 
 //for token generation
 const signToken = id => {
+  // function to generate the jwt token
   return jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN
   });
@@ -15,6 +16,7 @@ const signToken = id => {
 
 const createSendToken = (user, statusCode, res) => {
   const token = signToken(user._id);
+  // initialising cookie options
   const cookieOptions = {
     expires: new Date(
       Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
@@ -23,8 +25,10 @@ const createSendToken = (user, statusCode, res) => {
     httpOnly: true
   };
 
+  // for hosting on web
   if (process.env.NODE_ENV === 'production') cookieOptions.secure = true;
 
+  //responding with token and cookieOptions as jwt
   res.cookie('jwt', token, cookieOptions);
 
   //remove password from output
@@ -82,6 +86,16 @@ exports.login = catchAsync(async (req, res, next) => {
   // });
 });
 
+exports.logout = (req, res) => {
+  res.cookie('jwt', 'loggedout', {
+    expires: new Date(Date.now() + 10 * 1000),
+    httpOnly: true
+  });
+  res.status(200).json({
+    status: 'success'
+  });
+};
+
 exports.protect = catchAsync(async (req, res, next) => {
   // 1)Getting token and check if it's there
   let token;
@@ -90,6 +104,8 @@ exports.protect = catchAsync(async (req, res, next) => {
     req.headers.authorization.startsWith('Bearer')
   ) {
     token = req.headers.authorization.split(' ')[1];
+  } else if (req.cookie.jwt) {
+    token = req.cookie.jwt;
   }
   if (!token) {
     return next(new AppError('You are not logged in', 401));
@@ -117,6 +133,36 @@ exports.protect = catchAsync(async (req, res, next) => {
   req.user = freshUser;
   next();
 });
+
+//only to render pages and there will be no error
+exports.isLoggedIn = async (req, res, next) => {
+  try {
+    if (req.cookies.jwt) {
+      // 1) Verify Token
+      const decoded = await promisify(jwt.verify)(
+        req.cookies.jwt,
+        process.env.JWT_SECRET
+      );
+
+      // 2)check if user still exist
+      const freshUser = await User.findById(decoded.id);
+      if (!freshUser) {
+        return next();
+      }
+      // 3)check if user changed password after token was issued
+      if (freshUser.changedPasswordAfter(decoded.iat)) {
+        return next();
+      }
+      //There is a logged in user
+      res.locals.user = freshUser;
+      return next();
+    }
+  } catch (err) {
+    return next();
+  }
+  next();
+};
+
 //wrapper function
 exports.restrictTo = (...roles) => {
   //middleware
